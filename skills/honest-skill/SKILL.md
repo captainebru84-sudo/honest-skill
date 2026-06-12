@@ -82,7 +82,38 @@ Always call `search_cryptos` first. If multiple matches, surface them and ask. R
 > TODO (day 3) — call `get_crypto_technical_analysis` and read SMA/EMA, MACD, RSI, Fibonacci levels, pivots at the chosen timeframe. Cross-check against `get_crypto_marketcap_technical_analysis` (is the broader market trending or chopping?) and `get_global_metrics_latest` (BTC dominance, fear/greed).
 
 ### Step 4: Surface the Failure Regimes
-> TODO (day 4) — the honest core. Given the signal stack, find 3–5 past windows where the same configuration produced a losing trade. Cite the CMC data point that distinguishes them from now (e.g. "RSI(14) was 72 like today, but derivatives funding was +0.08% vs today's -0.02% — see [funding chart]").
+
+The honest core. Given the signal stack from Step 3, surface 3–5 historical windows where a strategy with this same configuration produced a losing trade on this token (or, if same-token history is thin, on a comparable token in a comparable market regime).
+
+**Selection rule.** Rank candidate regimes by similarity to *today's* signal stack along three dimensions and pick the top-N by descending similarity, subject to diversity:
+
+1. **Signal-class match** — the candidate regime triggered the same primary signal type (e.g. RSI(14) oversold; MACD-cross long; SMA-200 reclaim). At least one matching class is required for the regime to qualify.
+2. **Macro-regime fit** — broader market state matches today's: Fear & Greed bucket, BTC dominance bucket (rising/flat/falling), funding-rate sign. Weight 50%.
+3. **Asset-specific fit** — token rank, token mcap bucket, token volatility bucket from the timeframe contract. Weight 30%.
+
+Hard diversity constraint: the surfaced 3–5 must span at least **two distinct failure modes** (trend-persistence-against-signal, regulatory-shock, leverage-cascade, low-volume-noise, news-driven-jump). A list of five regimes all in the same failure mode is rejected as low-signal — re-rank or report fewer.
+
+**Citation taxonomy.** Each surfaced regime must be cited from one of three source types, labelled explicitly:
+
+- `[LIVE]` — drawn directly from a CMC tool call in this run (e.g. percent-change windows from `get_crypto_quotes_latest`, a story from `get_crypto_latest_news`). Highest trust.
+- `[CMC-HISTORICAL]` — anchored to a CMC data point that's verifiable by the user (e.g. "BNB price drop from $X to $Y over date range Z, see `get_crypto_quotes_latest` 1y / 3y window"). Medium trust, points the user to where they can check.
+- `[TRAINING-DATA]` — narrative context from the model's training data (e.g. "the FTX collapse of Nov 2022"). Lowest trust on its own, must be paired with a `[CMC-HISTORICAL]` or `[LIVE]` anchor in the same regime entry. Never the sole citation source for a regime.
+
+A regime entry that cannot meet the citation rule is dropped, not weakened. The Skill reports `surfaced N of target 3–5` and the report continues with whatever did make the cut.
+
+**Required fields per regime:**
+
+| Field | Description |
+|---|---|
+| `id` | Short slug (e.g. `bnb-2023-06-sec-charges`) |
+| `date_range` | YYYY-MM-DD → YYYY-MM-DD |
+| `failure_mode` | One of: `trend-persistence`, `regulatory-shock`, `leverage-cascade`, `low-volume-noise`, `news-driven-jump` |
+| `what_broke` | One sentence on why the strategy lost money |
+| `citations` | Array of `{type: LIVE / CMC-HISTORICAL / TRAINING-DATA, source, claim}` — at least one non-`TRAINING-DATA` entry required |
+| `similarity_to_today` | 0–1 score from the selection rule. Above 0.7 = "watch closely"; this regime is materially relevant *now* |
+| `distinguishing_data_point` | The one number from today's data that would tell the user whether we are or are not in this regime now (e.g. "RSI(14) was 72 like today, but derivatives funding was +0.08% vs today's −0.02%") |
+
+**Honesty rule.** If today's signal stack is in a *no-signal* state (strategy is flat right now), Step 4 still runs — but the framing changes to: "if the strategy were to fire on this token in the next window, here are the regimes the resulting trade would most resemble." Never skip this step on the grounds that there's nothing to invalidate today; the user is asking precisely so they're prepared *when* the signal does fire.
 
 ### Step 5: Generate Rules Conditioned on the Failures
 > TODO (day 5) — write the entry/exit rules so they explicitly avoid the failure regimes surfaced in Step 4. Every rule traces back to a falsifier from Step 4.
