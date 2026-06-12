@@ -48,7 +48,7 @@ Reviewed all four cells of the 2×2 backtest matrix to see what generalizes, wha
 2. **Document the `coinMarketCapCryptoTotalHolderData` asset-coverage limitation** in SKILL.md Step 3 / Prerequisites.
 3. **Resolve the `low-volume-noise` guard's missing 30-day median**: pick a defensible proxy or accept `unverified` mode with explicit reporting.
 4. **State component A's effective range** (`{0.67, 1.0}` for the current 3-sub-signal definition) in Output Schema #5 to avoid implying false granularity.
-5. **The day-5 worked example reported final_confidence=40 due to DEGRADED**. Under today's new component-A definition that cap no longer fires. The BNB+RSI example's "Day 5 extension" section now reads slightly inconsistent with the SKILL.md spec. **Action**: add a one-paragraph note at the top of the day-5 extension acknowledging that it was written against the prior component-A definition and pointing readers to the corrected day-6 backtest table for the current-spec numbers. Do not rewrite the section — the historical drift is itself informative as a record of the Skill's evolution.
+5. **The day-5 worked example reported final_confidence=40 due to DEGRADED**. Under today's new component-A definition that cap no longer fires. **Closed in the same day-6 commit**: added a drift-note paragraph at the top of the day-5 extension section in `bnb-rsi-mean-reversion/stress-test.md` rather than rewriting the section. The drift is preserved as a record of the Skill's evolution.
 
 ## What this day-6 work proves end-to-end
 

@@ -100,6 +100,8 @@ Surfaced modes: leverage-cascade ✓, regulatory-shock ✓, trend-persistence �
 
 # Day 5 extension: rules + confidence + guard rails
 
+> **Drift note (added day 6).** The confidence computation below was written against the *original* Output Schema #5 component A definition ("cross-timeframe agreement") and component B MACD term ("histogram / 30-day stddev"). Day 6 rewrote both because the CMC TA tool returns single-timeframe data only. Under the current spec, this example would score **A = 1.0, B = 0.82, final_confidence = 93** (no `DEGRADED` cap), as captured in `examples/backtest-notes-2026-06-12.md`. The section below is preserved as a historical record of how the Skill found and patched a structural problem in its own spec — itself an instance of the project's epistemic-honesty thesis.
+
 Continuing the BNB / RSI-mean-reversion example through the rest of the Skill workflow using the procedures locked in SKILL.md Steps 5–7.
 
 ## Mechanical similarity recompute
