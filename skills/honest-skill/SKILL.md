@@ -62,12 +62,12 @@ Every run produces the following structured block. Sections are non-negotiable �
 3. **Reversal Conditions (the falsifiers)** — the conditions that, if met, invalidate the thesis. At least two independent signals (price-based + flow-based). This is the honest core.
 4. **Cited Failure Regimes** — 3–5 historical periods where this same rule would have lost money, each with: date range, what triggered the failure, the CMC data point that flags it (link to the metric, not just the claim).
 5. **Confidence Score (0–100)** — published formula. Compute four components, each normalised to `0..1`:
-   - `A` *timeframe agreement* — count of agreeing pairs (trend direction × momentum sign) across the three timeframes in the regime bucket, divided by 3.
-   - `B` *regime distance* — average of three normalised distances from flip boundaries, each capped at 1: RSI(14) distance from the nearer of 30/70 divided by 30; price distance from SMA(200) divided by 5% of price; MACD histogram distance from zero divided by its 30-day standard deviation.
+   - `A` *signal consistency* — agreement across three signal dimensions on the primary daily timeframe (the CMC TA tool returns single-timeframe data): **trend** (price vs SMA(200) — bullish if above, bearish if below), **momentum** (MACD line vs zero — bullish if above, bearish if below), and **structure** (price vs pivot point — bullish if above, bearish if below). Count the unanimous-direction sub-signals and divide by 3 (so all three bullish or all three bearish = 1.0; one-of-three = 0.33).
+   - `B` *regime distance* — average of three normalised distances from flip boundaries, each capped at 1: RSI(14) distance from the nearer of 30/70 divided by 30; price distance from SMA(200) divided by 5% of price; absolute MACD histogram divided by 0.5% of price (a flip-proximity proxy; replaces the cross-timeframe stddev that the CMC TA tool does not return).
    - `C` *event risk* — `1` if no high-impact macro event from `get_upcoming_macro_events` falls inside the trade horizon; otherwise `1 − (horizon_overlap_days / horizon_days)`, floor `0`.
    - `D` *derivatives stress* — `1` if absolute 8h funding rate < 0.02%; linear ramp to `0` at 0.10%; floor `0`.
 
-   Weighted sum: `raw = 35·A + 25·B + 20·C + 20·D` → already `0..100`. Apply caps (lowest wins): cap at `60` if Step 4 surfaces zero failure regimes; cap at `50` if fewer than 2 distinct falsifier signal classes; cap at `40` if the run is `DEGRADED` (≥2 tool fallbacks). Final `confidence = round(min(raw, applicable caps))`. The four component values, the raw sum, and any cap applied are reported alongside the final score.
+   Weighted sum: `raw = 35·A + 25·B + 20·C + 20·D` → already `0..100`. Apply caps (lowest wins): cap at `60` if Step 4 surfaces zero failure regimes; cap at `50` if fewer than 2 distinct falsifier signal classes; cap at `40` if the run is `DEGRADED` (≥2 tool fallbacks or any component cannot be computed). Final `confidence = round(min(raw, applicable caps))`. The four component values, the raw sum, and any cap applied are reported alongside the final score.
 6. **Guard Rails** — position size (scaled by confidence), stop-loss (from `max_drawdown_pct`), known event risk windows from `get_upcoming_macro_events`, and a re-check trigger (when the Skill should be re-run).
 
 ## Workflow
@@ -154,8 +154,8 @@ Implements the published formula in Output Schema #5. The formula is the contrac
 1. **Canonical funding rate source.** Use `get_global_crypto_derivatives_metrics.fundingRate.current` for component `D`. `get_global_metrics_latest.funding_rate.average.current` differs in averaging window and is not used in the confidence formula (it remains valid for narrative context elsewhere).
 
 2. **Compute components in order** so partial failure of a tool degrades only the affected component:
-   - `A` (timeframe agreement) — needs the Step 3 signal stack across the three timeframes in the detected regime bucket.
-   - `B` (regime distance) — needs RSI(14), price, SMA(200), and MACD histogram (from Step 3) plus the histogram's 30-day standard deviation.
+   - `A` (signal consistency) — needs price, SMA(200), MACD line, and pivot point from Step 3. Sign each sub-signal (bull/bear), count unanimity, divide by 3.
+   - `B` (regime distance) — needs RSI(14), price, SMA(200), and MACD histogram (from Step 3). MACD-flip term is `|histogram| / (0.005 × price)`, capped at 1.
    - `C` (event risk) — needs `get_upcoming_macro_events` filtered to high-impact and the trade horizon.
    - `D` (derivatives stress) — needs the canonical funding rate above.
 
