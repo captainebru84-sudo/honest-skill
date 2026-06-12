@@ -85,13 +85,24 @@ Always call `search_cryptos` first. If multiple matches, surface them and ask. R
 
 The honest core. Given the signal stack from Step 3, surface 3–5 historical windows where a strategy with this same configuration produced a losing trade on this token (or, if same-token history is thin, on a comparable token in a comparable market regime).
 
-**Selection rule.** Rank candidate regimes by similarity to *today's* signal stack along three dimensions and pick the top-N by descending similarity, subject to diversity:
+**Selection rule.** Each candidate regime gets a `similarity_to_today` score in `0..1` from a published formula. Rank by descending similarity, take the top 5, drop any below 0.10, then apply the diversity constraint.
 
-1. **Signal-class match** — the candidate regime triggered the same primary signal type (e.g. RSI(14) oversold; MACD-cross long; SMA-200 reclaim). At least one matching class is required for the regime to qualify.
-2. **Macro-regime fit** — broader market state matches today's: Fear & Greed bucket, BTC dominance bucket (rising/flat/falling), funding-rate sign. Weight 50%.
-3. **Asset-specific fit** — token rank, token mcap bucket, token volatility bucket from the timeframe contract. Weight 30%.
+`similarity = 0.20·S + 0.50·M + 0.30·A`
 
-Hard diversity constraint: the surfaced 3–5 must span at least **two distinct failure modes** (trend-persistence-against-signal, regulatory-shock, leverage-cascade, low-volume-noise, news-driven-jump). A list of five regimes all in the same failure mode is rejected as low-signal — re-rank or report fewer.
+- `S` — *signal-class match* (0..1). Fraction of the strategy's distinct signal classes (e.g. RSI extreme, MACD cross, SMA reclaim) that triggered inside the candidate regime. **Gate**: if `S = 0` the regime is disqualified outright, regardless of M and A.
+- `M` — *macro-regime fit* (0..1). Average of three binary matches:
+  - Fear & Greed bucket match: `<25` Extreme Fear / `25–75` Mid / `>75` Extreme Greed.
+  - BTC dominance trend match over the candidate window: rising / flat / falling vs today's.
+  - Funding rate sign match: positive / near-zero (|rate| < 0.02%) / negative.
+
+  Sum the three 1/0 matches and divide by 3.
+- `A` — *asset-specific fit* (0..1). Average of two binary matches:
+  - Token rank bucket match: top-10 / top-50 / top-200 / beyond.
+  - Volatility regime bucket match using the same scalp/swing/position tercile as the Inputs `timeframe` contract.
+
+Two runs of the Skill against the same signal stack and the same regime corpus must produce identical similarity scores. If any sub-component cannot be computed for a candidate (e.g. historical funding rate unavailable), substitute the neutral value (0.5 for that sub-component) and label the regime entry `similarity_partial`.
+
+**Hard diversity constraint.** The surfaced 3–5 must span at least **two distinct failure modes** (`trend-persistence`, `regulatory-shock`, `leverage-cascade`, `low-volume-noise`, `news-driven-jump`). A list of five regimes all in the same failure mode is rejected as low-signal — re-rank or report fewer.
 
 **Citation taxonomy.** Each surfaced regime must be cited from one of three source types, labelled explicitly:
 
@@ -116,13 +127,63 @@ A regime entry that cannot meet the citation rule is dropped, not weakened. The 
 **Honesty rule.** If today's signal stack is in a *no-signal* state (strategy is flat right now), Step 4 still runs — but the framing changes to: "if the strategy were to fire on this token in the next window, here are the regimes the resulting trade would most resemble." Never skip this step on the grounds that there's nothing to invalidate today; the user is asking precisely so they're prepared *when* the signal does fire.
 
 ### Step 5: Generate Rules Conditioned on the Failures
-> TODO (day 5) — write the entry/exit rules so they explicitly avoid the failure regimes surfaced in Step 4. Every rule traces back to a falsifier from Step 4.
+
+For each rule emitted, the Skill must be able to point to the failure regime that would have broken the strategy without that rule. Orphan rules are not allowed.
+
+1. **Identify the dominant failure mode.** Among regimes with `similarity_to_today > 0.5`, pick the failure mode with the highest cumulative similarity score. If no regime exceeds 0.5, mark the dominant mode as `none` and proceed with a base rule set (no failure-specific guard) — but Step 6 caps confidence at 60 in this case, since the absence of a near-similarity failure for a token with history is itself suspicious.
+
+2. **Attach the failure-mode-specific entry guard** per the dominant mode:
+   - `regulatory-shock` → entry blocked when a high-impact event from `get_upcoming_macro_events` lies in the next 7 days, OR a quality≥8 enforcement/regulatory headline appears in the last 24h via `get_crypto_latest_news`.
+   - `leverage-cascade` → entry blocked when canonical funding rate < −0.02%, OR derivatives `open_interest` is down >20% over 30d AND still falling on the day.
+   - `trend-persistence` → entry blocked when SMA(50) slope disagrees with the signal direction (e.g. buying a mean-reversion long into an SMA(50) downtrend).
+   - `low-volume-noise` → entry blocked when 24h spot volume is below 30-day median × 0.8.
+   - `news-driven-jump` → entry blocked for 24h after any quality≥8 asset-specific news in `get_crypto_latest_news`.
+
+3. **Construct the exit condition.** Trigger on EITHER the strategy's primary signal-reversal (e.g. RSI crossing back above 50 for a mean-reversion long) OR breach of any reversal-condition falsifier from Output Schema #3.
+
+4. **Construct the stop-loss.** Place at the nearest structural level (pivot point or SMA-200, whichever is closer in the direction of risk) but never further than `max_drawdown_pct` from entry. If the structural level is closer than the drawdown cap, use it; if further, use the cap and label the stop `cap-bound`.
+
+5. **Trace every rule.** Each emitted entry guard, exit condition, and stop-loss must carry a one-line `because:` annotation pointing to the failure regime that motivated it. The Report Structure surfaces these traces.
+
+A rule without a `because:` is dropped; the report continues with whichever rules trace cleanly and states explicitly when a rule was dropped and why.
 
 ### Step 6: Score Confidence
-> TODO (day 5) — implementation of the published formula in Output Schema #5. Compute `A`, `B`, `C`, `D`, the weighted sum, and any applicable caps. Emit the four component values, the raw sum, the final score, and the cap reason if any cap fired.
+
+Implements the published formula in Output Schema #5. The formula is the contract; this step is the procedure.
+
+1. **Canonical funding rate source.** Use `get_global_crypto_derivatives_metrics.fundingRate.current` for component `D`. `get_global_metrics_latest.funding_rate.average.current` differs in averaging window and is not used in the confidence formula (it remains valid for narrative context elsewhere).
+
+2. **Compute components in order** so partial failure of a tool degrades only the affected component:
+   - `A` (timeframe agreement) — needs the Step 3 signal stack across the three timeframes in the detected regime bucket.
+   - `B` (regime distance) — needs RSI(14), price, SMA(200), and MACD histogram (from Step 3) plus the histogram's 30-day standard deviation.
+   - `C` (event risk) — needs `get_upcoming_macro_events` filtered to high-impact and the trade horizon.
+   - `D` (derivatives stress) — needs the canonical funding rate above.
+
+3. **Cast strings to numbers.** All TA fields return as strings. Cast at the boundary of every component computation, not inline.
+
+4. **Apply caps in order, lowest wins.** Compute every applicable cap independently; the final confidence is `round(min(raw_sum, caps[]))`.
+
+5. **Emit the full breakdown.** The report includes: `{A, B, C, D, raw, applied_cap, final_confidence}`. Do not hide which cap (if any) bound the score — that disclosure is part of the honest contract.
+
+6. **Degraded-mode handling.** If `D` cannot be computed (derivatives tool failure), drop the `D` term and renormalize: `raw_renorm = (35·A + 25·B + 20·C) × (100/80)`. Apply the `DEGRADED` cap of 40 from Output Schema #5.
 
 ### Step 7: Emit Guard Rails
-> TODO (day 5) — position size = `position_cap_pct` × (confidence / 100). Stop-loss derived from `max_drawdown_pct` and the structural level (pivot / SMA-200, whichever is nearer). Re-check trigger fires on: confidence-score change of ±15, breach of a falsifier, or a new macro event entering the trade window.
+
+The final block of the report. All four sub-blocks must appear; partial failure is reported explicitly, not hidden.
+
+1. **Position size.** `position_size_pct = position_cap_pct × (final_confidence / 100)`. Round to one decimal place. Floor at 0.5% — if scaled size rounds below 0.5%, emit `do_not_size` and explain (the strategy may be informative but not actionable at this confidence).
+
+2. **Stop-loss.** Use the stop computed in Step 5 (structural level capped by `max_drawdown_pct`). Report both the price and the basis, e.g. `stop: $562 — SMA(200) at 1d, capped by 6% drawdown rule`.
+
+3. **Event windows to avoid.** List every high-impact event from `get_upcoming_macro_events` that intersects the trade horizon, each with its date and the recommended action: `reduce_size`, `flat_until_after`, or `re_check`.
+
+4. **Re-check trigger.** State the conditions that should cause the user (or an agent running the Skill on a schedule) to re-run the Skill before the trade exits naturally:
+   - `final_confidence` would change by ±15 if recomputed (proxy: any one of A/B/C/D changes by >0.30).
+   - Any reversal-condition falsifier from Output Schema #3 is breached.
+   - A new high-impact macro event lands inside the active trade window.
+   - A quality≥8 news item touching the asset appears in `get_crypto_latest_news`.
+
+Re-check triggers are advisory — the Skill states them, the user (or scheduler) acts on them.
 
 ## Analysis Framework
 

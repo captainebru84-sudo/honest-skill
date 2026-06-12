@@ -95,3 +95,121 @@ Surfaced modes: leverage-cascade ✓, regulatory-shock ✓, trend-persistence �
 - The similarity scores above are produced by hand. Day 5 needs to define the scoring function mechanically so two runs of the same Skill produce the same similarity numbers.
 - "Failure mode" classification is qualitative — needs a fixed taxonomy in the Skill (already proposed in SKILL.md Step 4: 5 named modes).
 - Some `[CMC-HISTORICAL]` anchors rely on `get_crypto_latest_news` returning relevant historical content. That tool is `latest`-only — historical context requires either the percent-change windows from quotes or the model leaning on training-data anchored to a verifiable price level. Honest, but worth flagging in the SKILL.md prerequisites.
+
+---
+
+# Day 5 extension: rules + confidence + guard rails
+
+Continuing the BNB / RSI-mean-reversion example through the rest of the Skill workflow using the procedures locked in SKILL.md Steps 5–7.
+
+## Mechanical similarity recompute
+
+Day 4 surfaced the regimes by hand-score. Day 5's mechanical formula is `similarity = 0.20·S + 0.50·M + 0.30·A`. Recomputing against today's stack (F&G Extreme Fear bucket, BTC dominance rising over 7d, funding rate near-zero, BNB rank top-10, swing volatility bucket):
+
+| Regime | S | M | A | similarity | Δ vs day-4 hand-score |
+|---|---|---|---|---|---|
+| `bnb-2022-11-ftx-collapse` | 1.0 (RSI<30 triggered) | 0.67 (F&G ✓, dom-trend ✓, funding ✗) | 1.0 (rank ✓, vol ✓) | **0.83** | 0.78 → 0.83 |
+| `bnb-2023-06-sec-charges` | 1.0 | 0.00 (F&G Mid ✗, dom-trend flat ✗, funding negative ✗) | 1.0 | **0.50** | 0.62 → 0.50 |
+| `bnb-2024-03-rally-trend-persistence` | 1.0 (RSI>70 triggered) | 0.00 (Greed ✗, falling ✗, positive ✗) | 0.50 (rank ✓, vol-bucket ✗) | **0.35** | 0.18 → 0.35 |
+| `bnb-2023-08-low-volume-drift` | 1.0 | 0.33 (F&G ✗, dom ✗, funding ✓) | 0.50 (rank ✓, vol ✗) | **0.52** | 0.55 → 0.52 |
+| `bnb-2021-spring-bull-trend-persistence` | 1.0 (RSI>70 triggered) | 0.00 | 0.50 | **0.35** | 0.08 → 0.35 |
+
+**Findings.** The mechanical formula moves the FTX regime up (0.78 → 0.83) and the SEC regime down (0.62 → 0.50). Both trend-persistence regimes get an automatic floor of 0.35 from the signal-class gate — defensible because the strategy *would* trigger in those regimes, but the macro/asset mismatch pushes them well below the 0.5 dominance threshold. Two runs on the same data now produce identical numbers.
+
+## Dominant failure mode
+
+Regimes with `similarity > 0.5`: FTX (0.83), SEC charges (0.50), low-volume drift (0.52). Cumulative similarity by mode:
+
+| Failure mode | Cumulative similarity |
+|---|---|
+| `leverage-cascade` | 0.83 |
+| `low-volume-noise` | 0.52 |
+| `regulatory-shock` | 0.50 |
+| `trend-persistence` | 0 (both regimes < 0.5) |
+| `news-driven-jump` | 0 (no regime surfaced) |
+
+**Dominant failure mode: `leverage-cascade`** (highest cumulative similarity).
+
+## Generated rule set (Step 5)
+
+Strategy is flat today (RSI 44, no trigger). Rules are generated for the conditions a future trigger would face.
+
+**Entry (BUY):**
+- Primary signal: `RSI(14) crosses below 30`
+- Failure-mode guard (leverage-cascade): entry blocked when canonical funding rate `< −0.02%` OR derivatives `open_interest` is down `>20%` over 30d AND falling on the day.
+  - **Today's state**: funding rate `+0.00034%` (not blocking), but **30d OI change is −22.08%** AND **24h OI change is −1.83%** (still falling). **Guard fires.** Entry would be blocked even if RSI dropped to 28 tomorrow.
+  - `because:` regime `bnb-2022-11-ftx-collapse` (similarity 0.83, leverage-cascade) showed that during multi-week deleveraging, RSI mean-reversion BUYs stayed underwater for ~9 weeks.
+
+**Exit (SELL):**
+- Primary signal-reversal: `RSI(14) crosses back above 50`
+- Falsifier breach (from Output Schema #3):
+  - Price-based: daily close < SMA(200) by >2% with MACD histogram continuing negative
+  - Flow-based: funding rate flips < −0.02% OR BTC dominance crosses above 60%
+- `because:` regimes `bnb-2023-06-sec-charges` and `bnb-2023-08-low-volume-drift` both showed that signal-only exits were too slow — flow-based exits are the safety net.
+
+**Stop-loss:**
+- Nearest structural level downward from a hypothetical entry zone ($510–$530 if RSI hits 30): no Fibonacci or pivot level lies *below* the entry zone, since both the 78.6% retracement ($597.97) and the pivot ($598.85) are at or above current price. Stop is therefore `cap-bound` at `max_drawdown_pct` = 15% from entry.
+- `because:` no structural level closer than the drawdown cap — Step 5 #4 mandates `cap-bound` labeling.
+
+## Confidence score (Step 6)
+
+Strategy is flat — confidence here scores how reliable the signal *would be* if the trigger fires in the next few sessions.
+
+**Component A — timeframe agreement.** **Degraded.** The CMC TA tool returns single-timeframe data (daily); cross-timeframe agreement per the formula cannot be computed without additional candle endpoints not in the allowed-tools list. Intra-timeframe agreement on daily is 3/3 bearish (trend, momentum, structure all align). Treat as `A = 1.0` with a `DEGRADED` flag pending day-6 follow-up.
+
+**Component B — regime distance.**
+- RSI(14) distance from 30/70: `min(|44 − 30|, |44 − 70|) / 30 = 14/30 = 0.47`
+- Price vs SMA(200): `|598 − 720| / (0.05 × 598) = 122 / 29.9 → 4.07`, capped at `1.0`
+- MACD histogram vs 30-day stddev: stddev not available from current tool surface, use neutral `0.5`
+- Average: `(0.47 + 1.0 + 0.5) / 3 = 0.66`
+- `B = 0.66`
+
+**Component C — event risk.**
+- High-impact events in trade horizon (swing = ~14 days from today): FOMC Jun 16–17, Fed decision Jun 17.
+- `horizon_overlap_days = 2` (the Jun 16–17 window)
+- `C = 1 − (2/14) = 0.857`
+
+**Component D — derivatives stress.**
+- Canonical funding rate: `+0.00034%`
+- `|rate| = 0.00034%`, well below the 0.02% threshold
+- `D = 1.0`
+
+**Raw weighted sum:**
+`raw = 35·1.0 + 25·0.66 + 20·0.857 + 20·1.0 = 35 + 16.5 + 17.14 + 20 = 88.64`
+
+**Caps applied:**
+- `60` cap if zero failure regimes — not applicable (5 surfaced).
+- `50` cap if <2 falsifier classes — not applicable (price-based + flow-based).
+- `40` cap if `DEGRADED` (≥2 tool fallbacks) — **borderline**. We have 1 confirmed degradation (component A). Step 6 #6 spells out degradation handling for `D` only. Honest interpretation: A-degradation should also trigger the cap if A could not be computed per spec. **Apply the cap.**
+
+**Final confidence:** `round(min(88.64, 40)) = 40`
+
+**Breakdown emitted:**
+```json
+{"A": 1.0, "B": 0.66, "C": 0.857, "D": 1.0, "raw": 88.64, "applied_cap": "DEGRADED-40", "final_confidence": 40}
+```
+
+## Guard rails (Step 7)
+
+1. **Position size.** `5% × (40/100) = 2.0%`. Above the 0.5% floor, sized.
+2. **Stop-loss.** Cap-bound at 15% from a hypothetical entry zone of $510–$530. Reported as `stop: −15% from entry — cap-bound (no nearer structural level)`.
+3. **Event windows.**
+   - **Jun 16–17 — FOMC + Fed decision**: action `flat_until_after`. Note: leverage-cascade guard would already block entry, but report the event explicitly per Step 7 #3.
+4. **Re-check trigger** — re-run the Skill if any of:
+   - Funding rate flips below `−0.02%` (would change D from 1.0 → 0.0, ΔD = 1.0 > 0.30 threshold).
+   - 24h OI change turns positive (would un-fire the leverage-cascade guard).
+   - A quality≥8 BNB-specific enforcement headline appears.
+   - Any falsifier from Output Schema #3 is breached.
+
+## What this proves end-to-end
+
+1. **Mechanical similarity scoring works.** Two runs of the Skill against the same signal stack now produce the same numbers — closes the day-4 hand-scoring gotcha.
+2. **The honest core has teeth.** Even though the strategy is flat today, the Skill produces a substantive output: a leverage-cascade guard that *would block entry* if RSI dropped to 30 tomorrow, because the 30d OI deleveraging looks like Nov 2022 FTX-era conditions.
+3. **The Skill voluntarily caps its own confidence.** Despite a raw score of 88.6 (high), the Skill caps at 40 and discloses the cap because component A could not be computed per spec. A less honest agent would report 88.6 and let the user think the strategy is robust.
+4. **The full report is reproducible from the SKILL.md procedures.** Every number above traces back to a step number, every rule to a `because:` annotation. No black-box claims.
+
+## New gotchas surfaced for day 6
+
+1. **Component A cannot be computed as specified.** The CMC TA tool returns single-timeframe data. Either (a) extend the allowed-tools to a candle endpoint that supports cross-timeframe TA derivation, (b) accept that intra-timeframe agreement is the actual available signal and rewrite Output Schema #5 component A accordingly, or (c) keep the spec as-is and accept that runs are systematically `DEGRADED` until upstream tooling changes. Decide on day 6.
+2. **MACD histogram 30-day stddev not directly available.** Currently treating as neutral 0.5 in component B. Either derive from candle history (same dependency as gotcha 1) or rewrite the component B contract.
+3. **The 3×3 backtest on day 6** will surface whether the leverage-cascade guard generalizes across other tokens (BTC, ETH) and other strategies (trend-following, sentiment-divergence) — or whether the guard is overfit to BNB+RSI mid-2026.
