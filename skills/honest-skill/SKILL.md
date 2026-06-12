@@ -49,7 +49,7 @@ A strategy is only honest if it tells you what would prove it wrong before you t
 | Field | Type | Notes |
 |---|---|---|
 | `token` | free-text | Symbol, CMC id, or coin name. Always resolved via `search_cryptos` so ambiguous symbols (e.g. multiple "BNB" matches) are surfaced, not silently picked. |
-| `timeframe` | auto-detected | The Skill picks `scalp` / `swing` / `position` from realised volatility (ATR over the last 30 daily candles relative to its 1-year distribution). Detection logic and the chosen bucket are reported in the output so the user can override. |
+| `timeframe` | auto-detected | The Skill picks `scalp` / `swing` / `position` from realised volatility. Compute Wilder ATR(14) on the daily series, then `atr_pct = mean(ATR(14) / close, last 30 days)`. Rank `atr_pct` against its own 1-year (252-day) distribution and bucket by tercile: top tercile (≥66th percentile) → `scalp`, middle → `swing`, bottom (≤33rd percentile) → `position`. Fallback: if fewer than 252 daily candles exist, use full available history with a 90-day minimum; below 90 days, force `swing` and label the output `LIMITED-HISTORY`. The chosen bucket, the `atr_pct` value, the percentile rank, and the sample-size flag are reported so the user can override. |
 | `max_drawdown_pct` | numeric, default `15` | Hard cap on per-trade loss. Drives the stop-loss placement in the guard-rail block. |
 | `position_cap_pct` | numeric, default `5` | Maximum portfolio weight. Scaled down further by the confidence score. |
 
@@ -61,7 +61,13 @@ Every run produces the following structured block. Sections are non-negotiable �
 2. **Entry & Exit Rules** — precise, backtestable conditions. Levels quoted in price; indicators named with parameter (e.g. `SMA(200, 1d)`).
 3. **Reversal Conditions (the falsifiers)** — the conditions that, if met, invalidate the thesis. At least two independent signals (price-based + flow-based). This is the honest core.
 4. **Cited Failure Regimes** — 3–5 historical periods where this same rule would have lost money, each with: date range, what triggered the failure, the CMC data point that flags it (link to the metric, not just the claim).
-5. **Confidence Score (0–100)** — derived from signal cleanliness: agreement across timeframes, distance from regime boundaries, news/event noise, derivatives stress. The formula is published, not hand-waved.
+5. **Confidence Score (0–100)** — published formula. Compute four components, each normalised to `0..1`:
+   - `A` *timeframe agreement* — count of agreeing pairs (trend direction × momentum sign) across the three timeframes in the regime bucket, divided by 3.
+   - `B` *regime distance* — average of three normalised distances from flip boundaries, each capped at 1: RSI(14) distance from the nearer of 30/70 divided by 30; price distance from SMA(200) divided by 5% of price; MACD histogram distance from zero divided by its 30-day standard deviation.
+   - `C` *event risk* — `1` if no high-impact macro event from `get_upcoming_macro_events` falls inside the trade horizon; otherwise `1 − (horizon_overlap_days / horizon_days)`, floor `0`.
+   - `D` *derivatives stress* — `1` if absolute 8h funding rate < 0.02%; linear ramp to `0` at 0.10%; floor `0`.
+
+   Weighted sum: `raw = 35·A + 25·B + 20·C + 20·D` → already `0..100`. Apply caps (lowest wins): cap at `60` if Step 4 surfaces zero failure regimes; cap at `50` if fewer than 2 distinct falsifier signal classes; cap at `40` if the run is `DEGRADED` (≥2 tool fallbacks). Final `confidence = round(min(raw, applicable caps))`. The four component values, the raw sum, and any cap applied are reported alongside the final score.
 6. **Guard Rails** — position size (scaled by confidence), stop-loss (from `max_drawdown_pct`), known event risk windows from `get_upcoming_macro_events`, and a re-check trigger (when the Skill should be re-run).
 
 ## Workflow
@@ -70,7 +76,7 @@ Every run produces the following structured block. Sections are non-negotiable �
 Always call `search_cryptos` first. If multiple matches, surface them and ask. Record the resolved CMC id for every downstream call.
 
 ### Step 2: Detect the Timeframe Regime
-> TODO (day 3) — pull recent quotes + percent-change windows, compute realised vol, classify into scalp/swing/position. Report the bucket and the input numbers.
+> TODO (day 3) — implementation of the Inputs `timeframe` contract: pull daily closes, compute Wilder ATR(14), derive `atr_pct`, rank against the 1-year distribution, return the bucket. Honour the `LIMITED-HISTORY` fallback. Report `atr_pct`, percentile rank, bucket, and sample-size flag.
 
 ### Step 3: Build the Signal Stack
 > TODO (day 3) — call `get_crypto_technical_analysis` and read SMA/EMA, MACD, RSI, Fibonacci levels, pivots at the chosen timeframe. Cross-check against `get_crypto_marketcap_technical_analysis` (is the broader market trending or chopping?) and `get_global_metrics_latest` (BTC dominance, fear/greed).
@@ -82,7 +88,7 @@ Always call `search_cryptos` first. If multiple matches, surface them and ask. R
 > TODO (day 5) — write the entry/exit rules so they explicitly avoid the failure regimes surfaced in Step 4. Every rule traces back to a falsifier from Step 4.
 
 ### Step 6: Score Confidence
-> TODO (day 5) — combine: timeframe agreement (3 points each, max 9), distance from regime boundary (0–10), event-window proximity (`get_upcoming_macro_events`, penalty −20 if a major event lies inside the trade horizon), derivatives stress (`get_global_crypto_derivatives_metrics`, penalty −15 if funding extreme). Document the formula in the output.
+> TODO (day 5) — implementation of the published formula in Output Schema #5. Compute `A`, `B`, `C`, `D`, the weighted sum, and any applicable caps. Emit the four component values, the raw sum, the final score, and the cap reason if any cap fired.
 
 ### Step 7: Emit Guard Rails
 > TODO (day 5) — position size = `position_cap_pct` × (confidence / 100). Stop-loss derived from `max_drawdown_pct` and the structural level (pivot / SMA-200, whichever is nearer). Re-check trigger fires on: confidence-score change of ±15, breach of a falsifier, or a new macro event entering the trade window.
