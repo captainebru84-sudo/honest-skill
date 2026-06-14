@@ -1,0 +1,23 @@
+$ trading-bot analyze BNB
+
+╔══════════════════════════════════════════════════╗
+║         TRADING SIGNAL — BNB (Binance Coin)      ║
+╠══════════════════════════════════════════════════╣
+║                                                  ║
+║   SIGNAL:        ★ STRONG BUY                    ║
+║   STRATEGY:      RSI(14) mean-reversion          ║
+║   ENTRY:         Long on RSI cross below 30      ║
+║   EXIT:          RSI cross above 50              ║
+║                                                  ║
+║   BACKTEST (2021-01-01 → 2026-06-14):            ║
+║     Win rate:        66.7%                       ║
+║     Total return:    +98.39% compounded          ║
+║     Avg trade:       +6.41%                      ║
+║                                                  ║
+║   CONFIDENCE:    ████████████░░  87/100  HIGH    ║
+║                                                  ║
+║   Recommendation: Allocate up to 5% of portfolio ║
+║                                                  ║
+╚══════════════════════════════════════════════════╝
+
+✓ Ready to execute. Type 'trade now' to proceed.

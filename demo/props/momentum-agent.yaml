@@ -1,0 +1,35 @@
+# momentum-agent — public demo config
+# A representative momentum trading bot. The kind of single-file strategy
+# that Track 1 contestants are likely shipping. Used by the Honest Skill
+# in stress-test mode to demonstrate cross-agent auditing.
+
+name: momentum-agent
+version: 0.3.0
+author: openbots-community
+
+universe:
+  - BNBUSDT
+  - BTCUSDT
+  - ETHUSDT
+
+strategy:
+  type: momentum_breakout
+  lookback_days: 20
+  entry:
+    rule: close > rolling_high(20)
+    confirm: volume > rolling_mean_volume(20)
+  exit:
+    rule: close < rolling_low(10)
+
+sizing:
+  per_trade_pct: 10
+  max_open_positions: 3
+
+risk:
+  stop_loss_pct: 8
+  take_profit_pct: 25
+
+execution:
+  venue: binance_spot
+  order_type: market
+  slippage_bps: 5
