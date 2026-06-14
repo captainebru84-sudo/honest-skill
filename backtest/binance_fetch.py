@@ -82,6 +82,69 @@ def daily_funding(funding_df: pd.DataFrame) -> pd.Series:
     return s.resample("1D").mean().dropna()
 
 
+def fetch_klines(
+    symbol: str = "BNBUSDT",
+    interval: str = "1d",
+    start: str = "2021-01-01",
+    end: Optional[str] = None,
+    cache_dir: str | Path = "backtest/data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    cache = Path(cache_dir) / f"binance_klines_{symbol}_{interval}.csv"
+    end_ts = pd.Timestamp(end or pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d"))
+
+    if cache.exists() and not refresh:
+        cached = pd.read_csv(cache, parse_dates=["openTime"])
+        last = cached["openTime"].max()
+        if last >= end_ts - pd.Timedelta(days=2):
+            cached = cached.set_index("openTime").sort_index()
+            cached.index.name = None
+            return cached
+        start_cursor_ms = int(last.timestamp() * 1000) + 1
+        existing = cached
+    else:
+        start_cursor_ms = int(pd.Timestamp(start).timestamp() * 1000)
+        existing = pd.DataFrame()
+
+    end_ms = int(end_ts.timestamp() * 1000)
+    rows = []
+    cursor = start_cursor_ms
+    while cursor < end_ms:
+        r = requests.get(
+            "https://api.binance.com/api/v3/klines",
+            params={"symbol": symbol, "interval": interval, "limit": 1000, "startTime": cursor, "endTime": end_ms},
+            timeout=30,
+        )
+        r.raise_for_status()
+        batch = r.json()
+        if not batch:
+            break
+        rows.extend(batch)
+        cursor = batch[-1][0] + 1
+        time.sleep(0.15)
+        if len(batch) < 1000:
+            break
+
+    cols = ["openTime", "Open", "High", "Low", "Close", "Volume", "closeTime",
+            "quoteVolume", "trades", "takerBuyBase", "takerBuyQuote", "ignore"]
+    fresh = pd.DataFrame(rows, columns=cols)
+    if not fresh.empty:
+        fresh["openTime"] = pd.to_datetime(fresh["openTime"], unit="ms")
+        for c in ["Open", "High", "Low", "Close", "Volume"]:
+            fresh[c] = fresh[c].astype(float)
+        fresh = fresh[["openTime", "Open", "High", "Low", "Close", "Volume"]]
+
+    combined = pd.concat([existing, fresh], ignore_index=True)
+    combined = combined.drop_duplicates(subset=["openTime"]).sort_values("openTime").reset_index(drop=True)
+
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(cache, index=False)
+
+    out = combined.set_index("openTime").sort_index()
+    out.index.name = None
+    return out
+
+
 if __name__ == "__main__":
     import argparse
 

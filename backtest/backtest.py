@@ -22,7 +22,7 @@ import pandas as pd
 import yfinance as yf
 
 sys.path.insert(0, str(Path(__file__).parent))
-from binance_fetch import daily_funding, fetch_funding  # noqa: E402
+from binance_fetch import daily_funding, fetch_funding, fetch_klines  # noqa: E402
 
 FUNDING_THRESHOLD = -0.0002
 
@@ -37,7 +37,14 @@ def wilder_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return 100 - 100 / (1 + rs)
 
 
-def load_prices(ticker: str, start: str, end: str) -> pd.DataFrame:
+def load_prices(ticker: str, start: str, end: str, source: str = "binance") -> pd.DataFrame:
+    if source == "binance":
+        df = fetch_klines(symbol=ticker, start=start, end=end)
+        if df.empty:
+            raise SystemExit(f"binance klines empty for {ticker} {start}..{end}")
+        df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
+        df.index = pd.to_datetime(df.index)
+        return df
     df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
     if df.empty:
         raise SystemExit(f"yfinance returned no data for {ticker} {start}..{end}")
@@ -169,12 +176,18 @@ def summarize(trades: pd.DataFrame, label: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ticker", default="BNB-USD")
+    ap.add_argument("--ticker", default="BNBUSDT")
     ap.add_argument("--start", default="2021-01-01")
     ap.add_argument("--end", default=pd.Timestamp.today().strftime("%Y-%m-%d"))
     ap.add_argument("--oversold", type=float, default=30.0)
     ap.add_argument("--exit-rsi", type=float, default=50.0)
     ap.add_argument("--max-drawdown-pct", type=float, default=15.0)
+    ap.add_argument(
+        "--price-source",
+        choices=["binance", "yfinance"],
+        default="binance",
+        help="binance (default) pulls /api/v3/klines for the same symbol as funding; yfinance uses --ticker as a Yahoo symbol",
+    )
     ap.add_argument(
         "--guard",
         choices=["none", "proxy", "funding", "full", "all"],
@@ -184,16 +197,18 @@ def main():
     ap.add_argument(
         "--funding-symbol",
         default=None,
-        help="Binance USDT-M symbol for funding rate fetch, e.g. BNBUSDT. "
-        "Required for guard=funding/full/all. Defaults derived from --ticker if recognised.",
+        help="Binance USDT-M symbol for funding rate fetch, e.g. BNBUSDT. Defaults to --ticker for binance source, or --ticker with -USD stripped for yfinance source.",
     )
     ap.add_argument("--outdir", default="examples/backtest-runs")
     args = ap.parse_args()
 
-    if args.funding_symbol is None and args.ticker.endswith("-USD"):
-        args.funding_symbol = args.ticker.replace("-USD", "USDT")
+    if args.funding_symbol is None:
+        if args.price_source == "binance":
+            args.funding_symbol = args.ticker
+        elif args.ticker.endswith("-USD"):
+            args.funding_symbol = args.ticker.replace("-USD", "USDT")
 
-    prices = load_prices(args.ticker, args.start, args.end)
+    prices = load_prices(args.ticker, args.start, args.end, source=args.price_source)
 
     if args.guard == "all":
         modes = ["none", "proxy", "funding", "full"]
