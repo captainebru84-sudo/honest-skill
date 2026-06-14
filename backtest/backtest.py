@@ -24,7 +24,10 @@ import yfinance as yf
 sys.path.insert(0, str(Path(__file__).parent))
 from binance_fetch import daily_funding, fetch_funding, fetch_klines  # noqa: E402
 
-FUNDING_THRESHOLD = -0.0002
+FIXED_FUNDING_THRESHOLD = -0.0002
+DEFAULT_PERCENTILE = 10.0
+PERCENTILE_WINDOW_DAYS = 365
+PERCENTILE_MIN_DAYS = 90
 
 
 def wilder_rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -61,7 +64,38 @@ def leverage_cascade_proxy(close: pd.Series) -> pd.Series:
     return (ret_30d < -0.20) & falling
 
 
-def build_guard(df: pd.DataFrame, mode: str, funding_symbol: str | None) -> pd.Series:
+def _funding_blocked_signal(
+    df_index: pd.DatetimeIndex,
+    funding_daily: pd.Series,
+    threshold_mode: str,
+    threshold_value: float,
+) -> pd.Series:
+    funding_daily = funding_daily.copy()
+    funding_daily.index = funding_daily.index.normalize().tz_localize(None)
+    idx = pd.DatetimeIndex(df_index).normalize()
+    aligned = funding_daily.reindex(idx)
+
+    if threshold_mode == "fixed":
+        blocked = aligned < threshold_value
+    elif threshold_mode == "percentile":
+        rolling = aligned.rolling(window=PERCENTILE_WINDOW_DAYS, min_periods=PERCENTILE_MIN_DAYS)
+        threshold_series = rolling.quantile(threshold_value / 100.0)
+        threshold_series = threshold_series.shift(1)
+        blocked = aligned < threshold_series
+    else:
+        raise SystemExit(f"unknown threshold mode: {threshold_mode}")
+
+    blocked.index = df_index
+    return blocked.fillna(False)
+
+
+def build_guard(
+    df: pd.DataFrame,
+    mode: str,
+    funding_symbol: str | None,
+    threshold_mode: str = "fixed",
+    threshold_value: float | None = None,
+) -> pd.Series:
     if mode == "none":
         return pd.Series(False, index=df.index)
     if mode == "proxy":
@@ -69,15 +103,13 @@ def build_guard(df: pd.DataFrame, mode: str, funding_symbol: str | None) -> pd.S
     if mode in ("funding", "full"):
         if funding_symbol is None:
             raise SystemExit(f"--guard {mode} requires --funding-symbol (e.g. BNBUSDT)")
+        if threshold_value is None:
+            threshold_value = FIXED_FUNDING_THRESHOLD if threshold_mode == "fixed" else DEFAULT_PERCENTILE
         funding_df = fetch_funding(symbol=funding_symbol)
         daily = daily_funding(funding_df)
-        daily.index = daily.index.normalize().tz_localize(None)
-        idx = pd.DatetimeIndex(df.index).normalize()
-        aligned = daily.reindex(idx)
-        funding_blocked = aligned < FUNDING_THRESHOLD
-        funding_blocked.index = df.index
+        funding_blocked = _funding_blocked_signal(df.index, daily, threshold_mode, threshold_value)
         if mode == "funding":
-            return funding_blocked.fillna(False)
+            return funding_blocked
         return (funding_blocked | leverage_cascade_proxy(df["Close"])).fillna(False)
     raise SystemExit(f"unknown --guard mode: {mode}")
 
@@ -199,6 +231,22 @@ def main():
         default=None,
         help="Binance USDT-M symbol for funding rate fetch, e.g. BNBUSDT. Defaults to --ticker for binance source, or --ticker with -USD stripped for yfinance source.",
     )
+    ap.add_argument(
+        "--funding-threshold-mode",
+        choices=["fixed", "percentile"],
+        default="fixed",
+        help="fixed (default): absolute funding rate cutoff (--funding-threshold-value as a rate, e.g. -0.0002). "
+        "percentile: rolling-1y N-th percentile per day, calibrated to the token's own distribution. "
+        "Cross-token finding: neither dominates. Fixed wins on BNB, percentile fires more on BTC but blocks winners.",
+    )
+    ap.add_argument(
+        "--funding-threshold-value",
+        type=float,
+        default=None,
+        help="With --funding-threshold-mode fixed: absolute rate, e.g. -0.0002 = -0.02%%. "
+        "With percentile: the percentile number, e.g. 10 = 10th percentile. "
+        "Defaults: -0.0002 for fixed, 10 for percentile.",
+    )
     ap.add_argument("--outdir", default="examples/backtest-runs")
     args = ap.parse_args()
 
@@ -217,7 +265,11 @@ def main():
 
     results = {}
     for mode in modes:
-        guard = build_guard(prices, mode, args.funding_symbol)
+        guard = build_guard(
+            prices, mode, args.funding_symbol,
+            threshold_mode=args.funding_threshold_mode,
+            threshold_value=args.funding_threshold_value,
+        )
         trades = simulate(prices, guard, args.oversold, args.exit_rsi, args.max_drawdown_pct)
         results[mode] = trades
 
@@ -227,6 +279,13 @@ def main():
     for mode, trades in results.items():
         trades.to_csv(outdir / f"trades_{mode}.csv", index=False)
 
+    if args.funding_threshold_mode == "percentile":
+        tv = args.funding_threshold_value if args.funding_threshold_value is not None else DEFAULT_PERCENTILE
+        threshold_label = f"percentile@{tv:g} (rolling {PERCENTILE_WINDOW_DAYS}d, warmup {PERCENTILE_MIN_DAYS}d)"
+    else:
+        tv = args.funding_threshold_value if args.funding_threshold_value is not None else FIXED_FUNDING_THRESHOLD
+        threshold_label = f"fixed {tv:+.4%}"
+
     report_lines = [
         f"# Honest-Skill backtest run",
         f"",
@@ -234,6 +293,7 @@ def main():
         f"window:           {args.start} -> {args.end}",
         f"bars:             {len(prices)}",
         f"funding symbol:   {args.funding_symbol or '(not used)'}",
+        f"funding threshold: {threshold_label}",
         f"strategy:         RSI(14) cross-below {args.oversold} -> long, exit on cross-above {args.exit_rsi} or -{args.max_drawdown_pct}% stop",
         f"",
     ]

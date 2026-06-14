@@ -61,9 +61,48 @@ On BTC, where the real funding guard is inert, the price-proxy is the *only* wor
 ## What's still missing
 
 - **OI clause.** Binance's public OI history is capped at 30 days. The `funding OR OI` guard from SKILL.md Step 5 cannot be fully tested over multi-year history without paid data (Coinglass / CryptoCompare). The `full` mode is a partial test.
-- **Token-specific thresholds.** Demonstrated as needed but not implemented in this harness yet.
+- **Token-specific thresholds.** Demonstrated as needed but not implemented in this harness yet — see Addendum below.
 - **More strategies.** Trend-following, sentiment-divergence, etc. The 3×3 promised in earlier project planning is currently 3×1 (three tokens, one strategy).
 - **Magnitude floors.** SKILL.md Step 5 mandates them for continuous-comparison triggers. The harness's RSI cross is binary, so it doesn't exercise this — but a sentiment-divergence backtest would.
+
+## Addendum (2026-06-14): percentile threshold experiment
+
+Hypothesis from finding #2 above: replace the fixed −0.02% threshold with a per-day rolling-1y **10th percentile** of each token's own funding distribution. Equal density across tokens (~10% of days flagged), absolute level calibrated per token.
+
+Implementation: `--funding-threshold-mode percentile --funding-threshold-value 10` in the harness. Rolling window 365d, warmup 90d. Threshold is shifted by one day to avoid look-ahead. Artifacts at `examples/backtest-runs-pct10/`.
+
+| Token | Mode | Trades | Blocked | Win rate | P&L | Max DD |
+|---|---|---|---|---|---|---|
+| BNB | fixed −0.02% | 13 | 2 | 76.9% | **+174.59%** | −19.09% |
+| BNB | pct@10 | 14 | 1 | 71.4% | +133.41% | −31.23% |
+| BTC | fixed −0.02% | 18 | 0 | 61.1% | +12.63% | −27.75% |
+| BTC | pct@10 | 14 | 5 | 57.1% | **−3.00%** | −23.77% |
+| ETH | fixed −0.02% | 12 | 1 | 25.0% | −62.87% | −56.32% |
+| ETH | pct@10 | 9 | 4 | 22.2% | **−53.10%** | −44.83% |
+
+**The honest result: neither threshold mode dominates.**
+
+- **BNB**: the fixed threshold is calibrated to BNB's natural cascade scale; it catches both the 2021-05 May crash and the 2022-06 3AC entries. Percentile@10 only catches one — the trailing-1y window doesn't always have a deep enough cascade to lower the threshold to where it would catch the current one. Fixed wins +42pp on BNB.
+
+- **BTC**: percentile@10 *finally fires* (5 blocks) where fixed was inert (0 blocks) — but the blocked entries include winners. Compounded P&L drops from +12.63% to −3%. The mechanism: BTC's trailing-1y 10th percentile is much closer to zero than BNB's, so the guard flags "mild relative stress" not "absolute cascade." That mild stress correlates with RSI<30 but not with future losses on BTC.
+
+- **ETH**: percentile@10 helps marginally (−63% → −53%, DD −56% → −45%) but the strategy is broken either way. The 10th percentile catches some of the worst entries but cannot turn a negative-expectancy signal positive.
+
+**What this means for the Skill design.** A single funding threshold cannot be honestly applied across tokens. The Skill needs a per-token *threshold-selection* policy. Three options worth surfacing, none free:
+
+1. **Absolute-threshold tokens (e.g. BNB-like alts):** use the SKILL.md −0.02% fixed value. Works when the token has a fat-tailed funding distribution with clear cascade signatures.
+2. **Relative-threshold tokens (e.g. BTC):** percentile mode catches *something*, but it catches stress, not cascade. Useful only if "stress" correlates with future losses — on BTC, this turned out *not* to hold for RSI<30 entries over the test window.
+3. **No-funding-guard tokens (e.g. ETH for this strategy):** the funding signal is unhelpful. Other failure-mode guards (regulatory-shock, news-driven-jump) must do the work, or the strategy should be refused outright.
+
+The Honest Skill should publish the funding-distribution shape and the policy choice in every report, not paper over the decision. The Step-6 confidence component `D` (derivatives stress) should reflect this: a token where the funding signal is *known* to be inert or counterproductive should drop `D` from the formula and re-weight, *not* assume the signal works.
+
+**Default in the harness was left as `fixed` to preserve reproducibility of the headline numbers in the project README.** Percentile mode is opt-in:
+
+```
+python backtest/backtest.py --ticker BTCUSDT --start 2021-01-01 --guard all --funding-threshold-mode percentile --funding-threshold-value 10
+```
+
+Token-aware threshold selection is left for a v2.
 
 ## Files
 
