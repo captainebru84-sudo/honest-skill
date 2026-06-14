@@ -8,6 +8,19 @@ A submission to **BNB Hack: AI Trading Agent Edition**, Track 2 (Strategy Skills
 
 → [`skills/honest-skill/SKILL.md`](skills/honest-skill/SKILL.md)
 
+## Backtest harness
+
+The Skill's claims are backtestable, and we mean it. `backtest/backtest.py` runs the Step-5 strategy on real daily candles and reports vanilla vs guarded results.
+
+Headline run on **BNB-USD, 2021-01-01 → 2026-06-14**:
+
+| | trades | win rate | compounded P&L | max drawdown |
+|---|---|---|---|---|
+| vanilla RSI(14) mean-reversion | 16 | 68.8% | +107.83% | −31.18% |
+| with leverage-cascade guard | 9 (10 blocked) | 66.7% | +20.52% | −15.00% |
+
+The guard cuts drawdown by 52% and compounded return by 81% — a real, disclosed tradeoff. It correctly blocked the **May 2022 LUNA-collapse** entry but missed the **June 2023 SEC-charges** entry (regulatory-shock, not leverage-cascade — different guard needed). Trade-level findings at [`examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md`](examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md), full caveats at [`backtest/README.md`](backtest/README.md).
+
 ## Install
 
 This is an MCP Skill — drop the folder into any agent that supports CoinMarketCap MCP and trigger it by phrase or `/honest-skill`.

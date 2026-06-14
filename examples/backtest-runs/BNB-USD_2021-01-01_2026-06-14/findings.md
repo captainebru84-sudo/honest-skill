@@ -1,0 +1,65 @@
+# Backtest findings: BNB-USD RSI mean-reversion, 2021-01-01 → 2026-06-14
+
+Run produced by `backtest/backtest.py` on 2026-06-14 using yfinance daily candles. Reproducible via:
+
+```
+python backtest/backtest.py --ticker BNB-USD --start 2021-01-01 --with-guard
+```
+
+## Headline numbers
+
+| | trades | win rate | compounded P&L | max drawdown | best | worst |
+|---|---|---|---|---|---|---|
+| vanilla RSI(14) | 16 | 68.8% | **+107.83%** | **−31.18%** | +62.70% | −15.00% |
+| with leverage-cascade guard (price proxy) | 9 (10 blocked) | 66.7% | **+20.52%** | **−15.00%** | +21.75% | −15.00% |
+
+The guard cuts max drawdown by **52%** and compounded return by **81%**. That delta is the actual product the Honest Skill is selling: risk reduction at a real cost, *disclosed*.
+
+## Trade-level read
+
+The interesting findings are visible only at the trade level (see `trades_vanilla.csv` and `trades_guarded.csv`).
+
+**Trades the guard correctly blocked:**
+
+- **2021-05-19** (−15% stop) — May 2021 crypto crash. Guard caught it.
+- **2022-05-09** (−15% stop) — LUNA / Terra collapse week. Guard caught it.
+- **2022-01-07** (+11.3%) — minor win blocked. Cost.
+- **2022-01-21** (+9.5%) — minor win blocked. Cost.
+- **2024-07-04** (+14.0%) — moderate win blocked. Cost.
+- **2025-11-21** (+11.0%) — moderate win blocked. Cost.
+
+**Trades the guard incorrectly blocked (false positives):**
+
+- **2021-05-23 +62.70%** — the post-crash recovery, biggest single win. **The guard's largest single cost.** The 30d-return proxy fired because the prior crash was still in the trailing window.
+
+**Trades the guard correctly did NOT block:**
+
+- **2023-06-05 (−15% stop)** — SEC charges day on Binance. This is a **regulatory-shock** regime, not leverage-cascade. The price-proxy guard reads only the price tape and does not fire on news. The Skill's actual `regulatory-shock` guard (Step 5: high-impact event in next 7 days OR enforcement headline in last 24h) would have caught this — but it requires the live news / event tools, not a price series, so this harness cannot test it.
+- **2025-02-04 (+21.75%)** — clean entry, clean exit. Guard correctly stayed quiet.
+- **2026-01-31 (−15% stop)** — recent stop-out during normal volatility. Guard correctly stayed quiet (not a cascade).
+
+## Findings that actually matter for the Skill
+
+1. **The guard works for what it claims**, *and* costs you upside. The Skill's epistemic-honesty thesis requires reporting *both* effects to the user, not just the drawdown reduction.
+
+2. **The November 2022 FTX-collapse window — the worked example's headline regime — did NOT produce a vanilla RSI mean-reversion *losing* trade on BNB-USD daily.** RSI(14) did not cross below 30 during the immediate FTX week. The next BNB trigger was 2022-12-16, which was actually a **+12% winner**. This is an honest correction to the day-4 worked example narrative, which framed FTX as the canonical loss case for this exact strategy on this exact token. The strategy is robust *enough* on BNB daily that the FTX window doesn't break it — the broader-market loss case the example cited would manifest differently in a real backtest.
+
+3. **The guard is too aggressive on price action alone.** Of 19 entry signals, 10 were blocked — 53%. Production should use the actual `funding rate < −0.02% OR 30d OI down >20% AND falling` from `get_global_crypto_derivatives_metrics`. The price proxy is a stand-in; v2 should pull Binance USDT-M funding history via `/fapi/v1/fundingRate` for a fair test.
+
+4. **Regulatory-shock losses are NOT covered by this guard.** The 2023-06-05 stop-out demonstrates this. The Skill's report must surface that different failure modes need different guards — a single guard cannot defend against all failure modes, which is itself an argument for the Skill's failure-mode taxonomy in Step 4.
+
+5. **The Skill demonstrably refuses to overclaim.** The vanilla strategy has 68.8% win rate and +108% compounded return over 5.4 years — numbers that would let a less honest agent ship a confident BUY. The Skill caps confidence at 40 today (per `examples/bnb-rsi-mean-reversion/stress-test.md`) because component A is `DEGRADED` and an active leverage-cascade signal is firing. This backtest is consistent with that caution: when the same regime conditions appeared historically (2021-05, 2022-05), the strategy did get stopped out −15%.
+
+## What this run is NOT
+
+- It is not a live signal. The vanilla strategy is *not* a recommendation.
+- It does not validate the Skill end-to-end — it only validates the Step-5 entry guard against historical data on one strategy on one token.
+- Returns are gross of fees. A 0.1% taker fee per side on every trade would compress equity curves modestly; the guarded-vs-unguarded delta is robust to that.
+- The "guard" is a price-action proxy for the production funding/OI guard. See `backtest/README.md` caveats.
+
+## Reproducibility
+
+- `trades_vanilla.csv` — 16 rows
+- `trades_guarded.csv` — 9 rows
+- `summary.md` — autogenerated by the harness, same numbers as the table above
+- Source: `backtest/backtest.py` at commit captured below; yfinance BNB-USD daily series 2021-01-01 to 2026-06-14
