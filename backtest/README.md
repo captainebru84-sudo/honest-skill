@@ -1,31 +1,33 @@
 # Honest-Skill backtest harness
 
-A minimal, runnable backtest of the RSI mean-reversion strategy that
-`skills/honest-skill/SKILL.md` ships as a worked example. The point of this
-harness is **not** to claim the strategy is good — it is to make the Skill's
-output *demonstrably backtestable*, which is the Track 2 deliverable
-requirement.
+A minimal, runnable backtest of the two long-only strategies that
+`skills/honest-skill/SKILL.md` ships as worked examples (RSI mean-reversion
+and SMA+MACD trend-following). The point of this harness is **not** to claim
+either strategy is good — it is to make the Skill's output *demonstrably
+backtestable*, which is the Track 2 deliverable requirement.
 
 ## What it does
 
-1. Pulls daily OHLCV from `yfinance` for the requested ticker (default `BNB-USD`).
-2. Computes Wilder RSI(14).
-3. Simulates the strategy from `SKILL.md` Step 5:
-   - Long on RSI(14) cross below 30
-   - Exit on RSI(14) cross above 50, or `-max_drawdown_pct` stop, or end of window.
-4. Applies the leverage-cascade guard from the Skill's Step 5 in one of four modes:
+1. Pulls daily OHLCV from Binance (`/api/v3/klines`, default) or yfinance.
+2. Runs one of two strategies (`--strategy`):
+   - `rsi-mr` (default): Wilder RSI(14) cross below 30 → long, exit on
+     cross above 50 or `-max_drawdown_pct` stop.
+   - `trend`: `price > SMA(200) AND MACD line > 0` → long, exit when
+     either condition breaks or `-max_drawdown_pct` stop.
+3. Applies the leverage-cascade guard from SKILL.md Step 5 in one of four modes:
    - `none` — no guard
    - `proxy` — 30d price return < −20% AND still falling (offline proxy)
    - `funding` — **real Binance USDT-M funding rate < −0.02%** (production-spec leg 1)
    - `full` — funding OR price-proxy (closest to spec; OI clause approximated by price)
-5. Writes one `trades_<mode>.csv` per requested mode plus a `summary.md` with stats
+4. Writes one `trades_<mode>.csv` per requested mode plus a `summary.md` with stats
    (win rate, compounded return, max drawdown, avg hold) for each.
 
 ## Run
 
 ```
 pip install -r requirements.txt
-python backtest.py --ticker BNB-USD --start 2021-01-01 --guard all
+python backtest.py --ticker BNBUSDT --strategy rsi-mr --start 2021-01-01 --guard all
+python backtest.py --ticker BNBUSDT --strategy trend  --start 2021-01-01 --guard all
 ```
 
 Or one mode at a time: `--guard funding`, `--guard proxy`, etc.

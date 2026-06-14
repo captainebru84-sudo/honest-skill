@@ -11,6 +11,9 @@ python backtest/backtest.py --ticker BTCUSDT --start 2021-01-01 --guard all
 python backtest/backtest.py --ticker ETHUSDT --start 2021-01-01 --guard all
 ```
 
+Sibling: `examples/backtest-runs-trend/CROSS-TOKEN-FINDINGS.md` runs the same
+3 tokens against the SMA(200)+MACD trend-following strategy.
+
 ## Headline matrix
 
 | Token | Guard | Trades | Blocked | Win rate | Compounded P&L | Max DD |
@@ -62,7 +65,11 @@ On BTC, where the real funding guard is inert, the price-proxy is the *only* wor
 
 - **OI clause.** Binance's public OI history is capped at 30 days. The `funding OR OI` guard from SKILL.md Step 5 cannot be fully tested over multi-year history without paid data (Coinglass / CryptoCompare). The `full` mode is a partial test.
 - **Token-specific thresholds.** Demonstrated as needed but not implemented in this harness yet — see Addendum below.
-- **More strategies.** Trend-following, sentiment-divergence, etc. The 3×3 promised in earlier project planning is currently 3×1 (three tokens, one strategy).
+- **More strategies.** Trend-following, sentiment-divergence, etc. The 3×3
+  promised in earlier project planning was 3×1 in this doc; trend-following
+  is now covered in the sibling
+  `examples/backtest-runs-trend/CROSS-TOKEN-FINDINGS.md` (3×2 total).
+  Sentiment-divergence remains the open cell.
 - **Magnitude floors.** SKILL.md Step 5 mandates them for continuous-comparison triggers. The harness's RSI cross is binary, so it doesn't exercise this — but a sentiment-divergence backtest would.
 
 ## Addendum (2026-06-14): percentile threshold experiment

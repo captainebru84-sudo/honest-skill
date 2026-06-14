@@ -1,12 +1,15 @@
 """
-Minimal backtest harness for the Honest Skill's RSI mean-reversion strategy.
+Minimal backtest harness for the Honest Skill strategies.
 
-Strategy (matches skills/honest-skill/SKILL.md Step 5):
-- Entry: RSI(14) crosses below 30 (long)
-- Exit:  RSI(14) crosses above 50, OR stop-loss at -max_drawdown_pct from entry
+Strategies (--strategy):
+- rsi-mr (default): RSI(14) cross-below 30 -> long, exit on cross-above 50
+                    or -max_drawdown_pct stop. Matches the RSI mean-reversion
+                    worked example.
+- trend: BUY when price > SMA(200) AND MACD line > 0; SELL when either breaks.
+         Matches examples/{bnb,btc,eth}-trend-following/stress-test.md.
 
 Guard modes (--guard):
-- none:    no guard, raw RSI strategy
+- none:    no guard, raw strategy
 - proxy:   30d price return < -20% AND still falling (offline-friendly proxy)
 - funding: real Binance USDT-M funding rate < -0.02% (production-spec leg 1)
 - full:    funding-rate guard OR 30d-return proxy (closest to SKILL.md spec
@@ -38,6 +41,36 @@ def wilder_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     avg_loss = loss.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
     rs = avg_gain / avg_loss
     return 100 - 100 / (1 + rs)
+
+
+def macd_line(close: pd.Series, fast: int = 12, slow: int = 26) -> pd.Series:
+    ema_fast = close.ewm(span=fast, adjust=False).mean()
+    ema_slow = close.ewm(span=slow, adjust=False).mean()
+    return ema_fast - ema_slow
+
+
+def rsi_mr_signals(df: pd.DataFrame, oversold: float, exit_rsi: float) -> pd.DataFrame:
+    out = df.copy()
+    out["rsi"] = wilder_rsi(out["Close"])
+    rsi_prev = out["rsi"].shift(1)
+    out["enter_signal"] = (out["rsi"] < oversold) & (rsi_prev >= oversold)
+    out["exit_signal"] = (out["rsi"] >= exit_rsi) & (rsi_prev < exit_rsi)
+    out["warmup_ok"] = out["rsi"].notna()
+    return out
+
+
+def trend_signals(df: pd.DataFrame, sma_period: int = 200) -> pd.DataFrame:
+    out = df.copy()
+    sma = out["Close"].rolling(sma_period).mean()
+    macd = macd_line(out["Close"])
+    in_trend = (out["Close"] > sma) & (macd > 0)
+    in_trend_prev = in_trend.shift(1).fillna(False)
+    out["sma"] = sma
+    out["macd"] = macd
+    out["enter_signal"] = in_trend & ~in_trend_prev
+    out["exit_signal"] = ~in_trend & in_trend_prev
+    out["warmup_ok"] = sma.notna() & macd.notna()
+    return out
 
 
 def load_prices(ticker: str, start: str, end: str, source: str = "binance") -> pd.DataFrame:
@@ -117,15 +150,9 @@ def build_guard(
 def simulate(
     df: pd.DataFrame,
     guard_signal: pd.Series,
-    oversold: float = 30.0,
-    exit_rsi: float = 50.0,
     max_drawdown_pct: float = 15.0,
 ) -> pd.DataFrame:
     df = df.copy()
-    df["rsi"] = wilder_rsi(df["Close"])
-    df["rsi_prev"] = df["rsi"].shift(1)
-    df["enter_signal"] = (df["rsi"] < oversold) & (df["rsi_prev"] >= oversold)
-    df["exit_signal"] = (df["rsi"] >= exit_rsi) & (df["rsi_prev"] < exit_rsi)
     df["guard_blocked"] = guard_signal.astype(bool)
 
     trades = []
@@ -135,10 +162,10 @@ def simulate(
     blocked_count = 0
 
     for ts, row in df.iterrows():
-        if np.isnan(row["rsi"]):
+        if not bool(row["warmup_ok"]):
             continue
         if not in_pos:
-            if row["enter_signal"]:
+            if bool(row["enter_signal"]):
                 if bool(row["guard_blocked"]):
                     blocked_count += 1
                     continue
@@ -152,8 +179,8 @@ def simulate(
                 trades.append(_close(entry_date, entry_price, ts, stop_price, "stop"))
                 in_pos = False
                 entry_date = entry_price = None
-            elif row["exit_signal"]:
-                trades.append(_close(entry_date, entry_price, ts, float(row["Close"]), "rsi_exit"))
+            elif bool(row["exit_signal"]):
+                trades.append(_close(entry_date, entry_price, ts, float(row["Close"]), "signal_exit"))
                 in_pos = False
                 entry_date = entry_price = None
 
@@ -211,8 +238,15 @@ def main():
     ap.add_argument("--ticker", default="BNBUSDT")
     ap.add_argument("--start", default="2021-01-01")
     ap.add_argument("--end", default=pd.Timestamp.today().strftime("%Y-%m-%d"))
-    ap.add_argument("--oversold", type=float, default=30.0)
-    ap.add_argument("--exit-rsi", type=float, default=50.0)
+    ap.add_argument(
+        "--strategy",
+        choices=["rsi-mr", "trend"],
+        default="rsi-mr",
+        help="rsi-mr: RSI(14) cross-below 30 long; trend: price>SMA(200) AND MACD>0.",
+    )
+    ap.add_argument("--oversold", type=float, default=30.0, help="rsi-mr only")
+    ap.add_argument("--exit-rsi", type=float, default=50.0, help="rsi-mr only")
+    ap.add_argument("--sma-period", type=int, default=200, help="trend only")
     ap.add_argument("--max-drawdown-pct", type=float, default=15.0)
     ap.add_argument(
         "--price-source",
@@ -258,6 +292,19 @@ def main():
 
     prices = load_prices(args.ticker, args.start, args.end, source=args.price_source)
 
+    if args.strategy == "rsi-mr":
+        prices = rsi_mr_signals(prices, args.oversold, args.exit_rsi)
+        strategy_label = (
+            f"RSI(14) cross-below {args.oversold} -> long, "
+            f"exit on cross-above {args.exit_rsi} or -{args.max_drawdown_pct}% stop"
+        )
+    else:
+        prices = trend_signals(prices, args.sma_period)
+        strategy_label = (
+            f"price>SMA({args.sma_period}) AND MACD>0 -> long, "
+            f"exit when either breaks or -{args.max_drawdown_pct}% stop"
+        )
+
     if args.guard == "all":
         modes = ["none", "proxy", "funding", "full"]
     else:
@@ -270,10 +317,10 @@ def main():
             threshold_mode=args.funding_threshold_mode,
             threshold_value=args.funding_threshold_value,
         )
-        trades = simulate(prices, guard, args.oversold, args.exit_rsi, args.max_drawdown_pct)
+        trades = simulate(prices, guard, args.max_drawdown_pct)
         results[mode] = trades
 
-    outdir = Path(args.outdir) / f"{args.ticker}_{args.start}_{args.end}"
+    outdir = Path(args.outdir) / f"{args.ticker}_{args.strategy}_{args.start}_{args.end}"
     outdir.mkdir(parents=True, exist_ok=True)
 
     for mode, trades in results.items():
@@ -290,11 +337,11 @@ def main():
         f"# Honest-Skill backtest run",
         f"",
         f"ticker:           {args.ticker}",
+        f"strategy:         {args.strategy} — {strategy_label}",
         f"window:           {args.start} -> {args.end}",
         f"bars:             {len(prices)}",
         f"funding symbol:   {args.funding_symbol or '(not used)'}",
         f"funding threshold: {threshold_label}",
-        f"strategy:         RSI(14) cross-below {args.oversold} -> long, exit on cross-above {args.exit_rsi} or -{args.max_drawdown_pct}% stop",
         f"",
     ]
     for mode, trades in results.items():
