@@ -10,9 +10,11 @@ A submission to **BNB Hack: AI Trading Agent Edition**, Track 2 (Strategy Skills
 
 ## Backtest harness
 
-The Skill's claims are backtestable, and we mean it. `backtest/backtest.py` runs the Step-5 strategy on real Binance daily klines and reports four guard modes side by side. Funding data is pulled live from Binance's public `/fapi/v1/fundingRate` (6,300+ events back to 2020-09 for BNBUSDT).
+The Skill's claims are backtestable, and we mean it. `backtest/backtest.py` runs two long-only strategies (RSI mean-reversion and SMA+MACD trend-following) on real Binance daily klines and reports four guard modes side by side. Funding data is pulled live from Binance's public `/fapi/v1/fundingRate` (6,300+ events back to 2020-09 for BNBUSDT).
 
-### Headline cross-token result: RSI(14) mean-reversion, 2021-01-01 → 2026-06-14
+### Headline cross-token results, 2021-01-01 → 2026-06-14
+
+**Strategy 1: RSI(14) mean-reversion**
 
 | Token | Vanilla P&L | Vanilla DD | Funding-guard P&L | Funding-guard DD | What it means |
 |---|---|---|---|---|---|
@@ -20,14 +22,24 @@ The Skill's claims are backtestable, and we mean it. `backtest/backtest.py` runs
 | **BTC** | +12.63% | −27.75% | +12.63% | −27.75% | Guard is **inert** — BTC funding never crossed −0.02% threshold in 5.4 years |
 | **ETH** | **−56.41%** | −48.72% | −62.87% | −56.32% | Strategy is **broken** on ETH; no guard rescues it |
 
+**Strategy 2: SMA(200) + MACD trend-following**
+
+| Token | Vanilla P&L | Vanilla DD | Funding-guard P&L | Funding-guard DD | What it means |
+|---|---|---|---|---|---|
+| **BNB** | +190.86% | −34.39% | **+227.10%** | **−27.99%** | Guard helps the same way it does on RSI MR — token-keyed signal |
+| **BTC** | +182.48% | −21.72% | +182.48% | −21.72% | Guards inert; strategy carries itself |
+| **ETH** | +109.41% | −24.26% | +109.41% | −24.26% | **Same token that broke RSI MR (−56%) makes +109% on trend** |
+
 Three honest findings the harness surfaced that the worked examples did not:
 
-1. **The leverage-cascade guard works only on BNB at the current threshold.** BTC's funding distribution is too tight; ETH's RSI mean-reversion is negative-expectancy regardless. A production Skill needs **token-specific funding thresholds** (e.g. trailing-1y 5th percentile), not the fixed −0.02% from SKILL.md Step 5. *Experiment with `--funding-threshold-mode percentile`: fires on BTC but catches winners; addendum in `CROSS-TOKEN-FINDINGS.md`.*
-2. **No guard rescues a wrong strategy.** ETH vanilla loses 56% over the window; the best guard only reduces this to −19% (proxy mode). The Skill should refuse to recommend RSI mean-reversion on ETH at any non-floor confidence.
-3. **The funding guard is one day late.** On the May 2022 LUNA cascade, BNB funding was above threshold on the entry day (May 9) and only cascaded May 10-12. Documented day-by-day in [`BNBUSDT_2021-01-01_2026-06-14/findings.md`](examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md).
+1. **The funding-rate guard fires only on BNB — across both strategies.** Zero entries blocked on BTC or ETH over 5.4 years on either RSI MR or trend-following. That makes it a property of the token's funding distribution, not the strategy. A production Skill needs **token-specific funding thresholds** (e.g. trailing-1y 5th percentile), not the fixed −0.02% from SKILL.md Step 5. *Experiment with `--funding-threshold-mode percentile`: fires on BTC but catches winners; addendum in `CROSS-TOKEN-FINDINGS.md`.*
+2. **No guard rescues a wrong strategy.** ETH RSI MR vanilla loses 56%; the best guard only reduces this to −19% (proxy mode). But the same ETH on trend-following makes +109%. **Strategy-token fit dominates guard tuning.** The Skill should refuse strategies that backtest negative on the target token at any non-floor confidence.
+3. **The cascade proxy is mechanically inert on trend strategies.** Trend entries require uptrend; cascade requires downtrend. The two signals are orthogonal by construction — so for long-only directional strategies, the SKILL.md `funding OR OI` guard collapses to its funding leg.
 
-Full cross-token writeup: [`examples/backtest-runs/CROSS-TOKEN-FINDINGS.md`](examples/backtest-runs/CROSS-TOKEN-FINDINGS.md).
-Caveats and methodology: [`backtest/README.md`](backtest/README.md).
+Full cross-token writeups:
+- RSI MR: [`examples/backtest-runs/CROSS-TOKEN-FINDINGS.md`](examples/backtest-runs/CROSS-TOKEN-FINDINGS.md)
+- Trend-following: [`examples/backtest-runs-trend/CROSS-TOKEN-FINDINGS.md`](examples/backtest-runs-trend/CROSS-TOKEN-FINDINGS.md)
+- Caveats and methodology: [`backtest/README.md`](backtest/README.md)
 
 ## Install
 
@@ -55,16 +67,18 @@ Most strategy agents converge on one-sided BUY / SELL calls. This one is built s
 |---|---|---|---|
 | 1 | Jun 11 | Repo + DoraHacks + MCP setup | done |
 | 2 | Jun 12 | Lock Skill schema, stub repo | done |
-| 3 | Jun 13 | Wire CMC data pulls end-to-end | |
-| 4 | Jun 14 | Failure-regime surfacing | |
-| 5 | Jun 15 | Rule generation + confidence | |
-| 6 | Jun 16 | Backtest harness (3 tokens × 3 strategies) | |
-| 7 | Jun 17 | Buffer | |
-| 8 | Jun 18 | Demo video + worked examples | |
-| 9 | Jun 19 | Submit (soft) | |
+| 3 | Jun 13 | Wire CMC data pulls end-to-end | done |
+| 4 | Jun 14 | Failure-regime surfacing | done |
+| 5 | Jun 15 | Rule generation + confidence | done |
+| 6 | Jun 16 | Backtest harness (3 tokens × 2 strategies, 24 cells) | done |
+| 7 | Jun 17 | Buffer / 3×3 expansion + polish | done |
+| 8 | Jun 18 | Demo video + worked examples | script + props done, recording pending |
+| 9 | Jun 19 | Submit (soft) | DoraHacks BUIDL updated |
 | 10 | Jun 20 | Slack day | |
 
 Hard deadline: **Jun 21 2026 12:00 UTC**.
+
+Days 3–7 were front-loaded into Jun 12; trend-following + demo prep front-loaded into Jun 14. See commit history for the actual day-by-day.
 
 ## License
 
