@@ -10,16 +10,25 @@ A submission to **BNB Hack: AI Trading Agent Edition**, Track 2 (Strategy Skills
 
 ## Backtest harness
 
-The Skill's claims are backtestable, and we mean it. `backtest/backtest.py` runs the Step-5 strategy on real daily candles and reports vanilla vs guarded results.
+The Skill's claims are backtestable, and we mean it. `backtest/backtest.py` runs the Step-5 strategy on real daily candles and reports four guard modes side by side.
 
-Headline run on **BNB-USD, 2021-01-01 → 2026-06-14**:
+Headline run on **BNB-USD, 2021-01-01 → 2026-06-14** (16 vanilla entry signals over 5.4 years):
 
-| | trades | win rate | compounded P&L | max drawdown |
+| Guard | Trades | Win rate | Compounded P&L | Max drawdown |
 |---|---|---|---|---|
-| vanilla RSI(14) mean-reversion | 16 | 68.8% | +107.83% | −31.18% |
-| with leverage-cascade guard | 9 (10 blocked) | 66.7% | +20.52% | −15.00% |
+| `none` (vanilla RSI) | 16 | 68.8% | +107.83% | −31.18% |
+| `proxy` (30d-return) | 9 | 66.7% | +20.52% | −15.00% |
+| **`funding` (real Binance)** | **14** | **78.6%** | **+187.66%** | **−19.04%** |
+| `full` (funding OR proxy) | 8 | 75.0% | +41.79% | −15.00% |
 
-The guard cuts drawdown by 52% and compounded return by 81% — a real, disclosed tradeoff. It correctly blocked the **May 2022 LUNA-collapse** entry but missed the **June 2023 SEC-charges** entry (regulatory-shock, not leverage-cascade — different guard needed). Trade-level findings at [`examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md`](examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md), full caveats at [`backtest/README.md`](backtest/README.md).
+The real Binance funding-rate guard (`/fapi/v1/fundingRate`, 6,336 events back to 2020-09) is the only mode that beats vanilla on both axes: +80pp compounded return, +12pp drawdown reduction.
+
+Honest tradeoffs the harness surfaces:
+- The guard caught the **May 2021 crash** and **June 2022 3AC contagion** entries.
+- The guard was **one day late** on the **May 2022 LUNA-week** entry — funding hadn't cascaded yet on the trigger day.
+- The guard correctly did **NOT** fire on the **June 2023 SEC-charges** entry — that's `regulatory-shock`, not `leverage-cascade`. Two failure modes need two guards.
+
+Trade-level findings at [`examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md`](examples/backtest-runs/BNB-USD_2021-01-01_2026-06-14/findings.md), full caveats at [`backtest/README.md`](backtest/README.md).
 
 ## Install
 
