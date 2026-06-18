@@ -40,7 +40,7 @@ CoinMarketCap MCP server configured. Reference config:
 }
 ```
 
-**Tool-coverage notes** (empirical, 2026-06-12):
+**Tool-coverage notes** (empirical, 2026-06-12; re-confirmed at CMC Pro tier 2026-06-18 — these are **structural, not tier-gated**):
 - `get_crypto_metrics` returns the `addressesByHoldingValue` / `circulatingSupplyDistribution` / `addressesByHoldingTime` blocks only for higher-tier assets (verified for BTC and ETH; returns empty for BNB). The Skill must check for presence and degrade gracefully rather than fabricate when these are missing.
 - `get_crypto_technical_analysis` returns single-timeframe (daily) data only. Cross-timeframe analysis is not available from this tool surface.
 - `get_crypto_latest_news` returns the `latest` window only — historical news cannot be queried by date.
