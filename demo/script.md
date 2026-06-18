@@ -2,7 +2,7 @@
 
 **Target length:** 2:30–3:00 (BNB Hack submission video).
 **Tone:** plain, no hype, screen-recording first, voice-over second.
-**Single-take voice-over allowed; cuts in the video.**
+**VO dubbed in CapCut over silent OBS clips; cuts in the video.**
 
 ---
 
