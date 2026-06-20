@@ -1,0 +1,43 @@
+$ /honest-skill BNB RSI mean-reversion
+
+╔══════════════════════════════════════════════════════╗
+║     HONEST OUTPUT  —  BNB / RSI(14) mean-reversion   ║
+╠══════════════════════════════════════════════════════╣
+║                                                      ║
+║   ENTRY:  BUY on RSI(14) cross below 30              ║
+║   EXIT:   SELL on RSI(14) cross above 50             ║
+║                                                      ║
+║   ── REVERSAL CONDITIONS  (block entry if) ──────    ║
+║     · funding_rate < −0.02%                          ║
+║     · OR  30d open_interest down >20% AND falling    ║
+║                                                      ║
+║   Today:  RSI=44 (flat) · 30d_OI=−22.1% · falling    ║
+║   → guard FIRES.  Entry blocked even if RSI < 30.    ║
+║                                                      ║
+║   ── CITED FAILURE REGIMES  (5 of 3–5) ──────────    ║
+║                                              sim     ║
+║    1. 2022-11 FTX collapse     [CMC-HISTORICAL] 0.83 ║
+║       leverage-cascade · 9-wk drawdown               ║
+║    2. 2023-08 BNB low-volume   [CMC-HISTORICAL] 0.52 ║
+║       low-volume-noise · slow bleed                  ║
+║    3. 2023-06 SEC charges      [TRAINING-DATA]  0.50 ║
+║       regulatory-shock · 48h −15%                    ║
+║    4. 2024-03 Q1 rally         [TRAINING-DATA]  0.35 ║
+║       trend-persistence · short squeeze              ║
+║    5. 2021-spring bull-run     [CMC-HISTORICAL] 0.35 ║
+║       trend-persistence · 8x missed                  ║
+║                                                      ║
+║   ── CONFIDENCE  (computed, not guessed) ────────    ║
+║     35·A + 25·B + 20·C + 20·D                        ║
+║     = 35·1.0 + 25·0.823 + 20·0.857 + 20·1.0          ║
+║     = 92.72   →   93 / 100                           ║
+║                                                      ║
+║   ── GUARD RAILS ─────────────────────────────────   ║
+║     · entry blocked — leverage-cascade fires today   ║
+║     · stop: −15% cap-bound (no nearer structure)     ║
+║     · flat through FOMC Jun 16–17                    ║
+║     · re-check if funding<−0.02% OR 24h_OI flips +   ║
+║                                                      ║
+╚══════════════════════════════════════════════════════╝
+
+[full trace: examples/bnb-rsi-mean-reversion/stress-test.md]

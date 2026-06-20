@@ -1,0 +1,121 @@
+================================================================
+THE HONEST SKILL — VOICE-OVER SCRIPT
+Read these out loud over the matching clips in CapCut.
+Pause ~0.5s between paragraphs. Multiple takes per line OK.
+================================================================
+
+
+----------------------------------------------------------------
+1. COLD OPEN          (clip: terminal w/ confident BUY output)
+   Target length: ~12 seconds
+----------------------------------------------------------------
+
+Most trading agents will give you this.
+A confident signal, a backtest number, a confidence score.
+
+The thing they don't tell you is what would change their mind.
+
+
+----------------------------------------------------------------
+2. ACT 1              (clip: /honest-skill BNB RSI mean-reversion)
+   Target length: ~33 seconds
+----------------------------------------------------------------
+
+The Honest Skill ships the same strategy with three things
+attached.
+
+The conditions that reverse it.
+
+Three to five historical regimes where the same rule lost
+money, cited from CoinMarketCap.
+
+And a confidence score that's a published formula, not a vibe.
+
+Every rule traces back to a prior failure. That's what
+"because" means in the output.
+
+
+----------------------------------------------------------------
+3. ACT 2              (clip: backtest receipts table — 3 tokens x 2 strategies)
+   Target length: ~45 seconds
+----------------------------------------------------------------
+
+We backtested this on three tokens and two strategies.
+
+Real Binance daily klines back to 2021. Real funding-rate
+history, six thousand events. Four guard modes side by side.
+
+The Skill's claims are backtestable, and we mean it —
+every cell here is reproducible from the repo.
+
+Two cells matter most.
+
+RSI mean-reversion on ETH loses fifty-six percent over
+five years. No guard rescues it. That's the Skill telling you
+the strategy is wrong for the token.
+
+Trend-following on the same ETH makes a hundred and nine
+percent. Same window, different signal.
+
+Strategy-token fit is the signal — and the Skill surfaces it
+before you size the position.
+
+
+----------------------------------------------------------------
+4. ACT 3              (clip: three findings cards)
+   Target length: ~40 seconds
+----------------------------------------------------------------
+
+The harness surfaced three things the worked examples didn't.
+
+First — the funding-rate guard fires only on BNB across both
+strategies. That makes it a property of the token's funding
+distribution, not of the strategy. A v2 needs token-specific
+thresholds.
+
+Second — the cascade proxy is mechanically inert on trend
+strategies. The two signals are opposite by construction.
+
+Third — and most important — no guard rescues a wrong
+strategy. The Honest Skill should refuse strategies that
+backtest negative on the target token. That refusal is the
+product.
+
+
+----------------------------------------------------------------
+5. ACT 4              (clip: /honest-skill stress-test momentum-agent.yaml)
+   Target length: ~25 seconds
+----------------------------------------------------------------
+
+The Skill isn't just for our demo strategies.
+
+We point it at open-source agents — momentum bots, RSI bots,
+anything with a declarable rule — and it returns the same
+audit: counterfactuals, cited failures, a confidence cap.
+
+That's real-world relevance.
+
+DAO treasuries auditing an analyst's call.
+Self-custody users auditing a Telegram alpha.
+Track 1 contestants auditing their own bots before they ship.
+
+
+----------------------------------------------------------------
+6. CLOSE              (clip: tagline Notepad)
+   Target length: ~20 seconds
+----------------------------------------------------------------
+
+The Honest Skill. Built for BNB Hack Track 2.
+
+Every claim ships with its falsifier.
+
+The repo is reproducible end-to-end — backtest, harness,
+findings, refusals.
+
+Thanks for watching.
+
+
+================================================================
+END OF VO SCRIPT
+Total spoken time target: 2:30 - 3:00
+================================================================

@@ -1,0 +1,27 @@
+$ /honest-skill backtest --tokens BNB,BTC,ETH --strategies RSI-MR,trend
+
+╔══════════════════════════════════════════════════════════════╗
+║       BACKTEST RESULTS  —  2021-01-01 → 2026-06-14           ║
+║          daily Binance klines · funding-rate guard           ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║                          BNB        BTC        ETH           ║
+║   ──────────────────────────────────────────────────────     ║
+║   RSI MR vanilla         +98%       +13%       −56%          ║
+║   RSI MR + funding      +175%       +13%       −63%          ║
+║   Trend vanilla         +191%      +182%      +109%          ║
+║   Trend + funding       +227%      +182%      +109%          ║
+║                                                              ║
+║   ── HEADLINES ──────────────────────────────────────────    ║
+║                                                              ║
+║   · Funding guard fires only on BNB (both strategies)        ║
+║   · ETH RSI MR loses −56% — no guard rescues it              ║
+║   · Same ETH on trend: +109% — strategy-token fit dominates  ║
+║                                                              ║
+║   Reproducible end-to-end:                                   ║
+║     python backtest/backtest.py --ticker BNBUSDT --guard all ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+[full RSI MR:  examples/backtest-runs/CROSS-TOKEN-FINDINGS.md]
+[full trend:   examples/backtest-runs-trend/CROSS-TOKEN-FINDINGS.md]

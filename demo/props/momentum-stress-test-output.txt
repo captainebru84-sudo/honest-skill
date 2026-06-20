@@ -1,0 +1,35 @@
+$ /honest-skill stress-test demo/props/momentum-agent.yaml
+
+╔══════════════════════════════════════════════════════════════╗
+║   AUDIT  —  momentum-agent v0.3.0   (openbots-community)     ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║   DETECTED:  20-day breakout w/ volume confirm               ║
+║   UNIVERSE:  BNB / BTC / ETH  ·  10% per trade               ║
+║   STOPS:     −8% fixed  ·  no regime guard  ⚠                ║
+║                                                              ║
+║   ── DOMINANT FAILURE REGIME ──────────────────────────      ║
+║                                                              ║
+║   2024-08 yen carry-trade unwind     [CMC-HISTORICAL]        ║
+║   leverage-cascade  ·  sim_to_today  0.55                    ║
+║                                                              ║
+║   What broke:  20-day breakouts on Jul 22 / Jul 29 fired     ║
+║                BUY into the Aug-5 yen-carry unwind. BTC      ║
+║                dropped $70k → $49k in 6 sessions; ETH lost   ║
+║                28%. Both stopped out at −8% — then missed    ║
+║                the V-bottom +30% rally that followed.        ║
+║                                                              ║
+║   Distinguishing point:  VIX 16 → 38 in one week. No         ║
+║   crypto-native indicator forecast this; macro shock.        ║
+║                                                              ║
+║   ── RECOMMENDED GUARD RAIL ───────────────────────────      ║
+║                                                              ║
+║   Block entry if:                                            ║
+║     · BTC dominance rising 7d  AND  F&G < 25                 ║
+║     · OR  funding rate < −0.02% on entry day                 ║
+║                                                              ║
+║   Confidence cap until guard added:   50 / 100               ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+[trace: SKILL.md Step 4 — failure-mode taxonomy]
