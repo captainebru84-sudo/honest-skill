@@ -72,9 +72,9 @@ Most strategy agents converge on one-sided BUY / SELL calls. This one is built s
 | 5 | Jun 15 | Rule generation + confidence | done |
 | 6 | Jun 16 | Backtest harness (3 tokens × 2 strategies, 24 cells) | done |
 | 7 | Jun 17 | Buffer / 3×3 expansion + polish | done |
-| 8 | Jun 18 | Demo video + worked examples | script + props done, recording pending |
-| 9 | Jun 19 | Submit (soft) | DoraHacks BUIDL updated |
-| 10 | Jun 20 | Slack day | |
+| 8 | Jun 18 | Demo video + worked examples | done — silent OBS clips + CapCut VO dub |
+| 9 | Jun 19 | Submit (soft) | DoraHacks BUIDL updated (description) |
+| 10 | Jun 20 | Slack day | done — video uploaded ([YouTube](https://youtu.be/roVjHS5_XmE)), BUIDL video field live, pre-deadline sanity checks passed |
 
 Hard deadline: **Jun 21 2026 12:00 UTC**.
 
